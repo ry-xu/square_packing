@@ -1,0 +1,824 @@
+<title>Square Packing Lab</title>
+<style>
+  :root { --bg:#fbfbfa; --ink:#1a1a1a; --muted:#777; --line:#ddd; --wall:#b5651d; --accent:#1f6f78; --record:#c2410c; --flat:#a9c7da; --sq:#cfd6d9; --sqlock:#8f9aa0; --sqpart:#b0babf; --good:#2f7d4a; --warn:#a15c07;
+          --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+  @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) { color-scheme: dark; --bg:#141414; --ink:#e6e6e6; --muted:#8a8a8a; --line:#333; --wall:#e0a15a; --accent:#4fb3bc; --record:#f08a5d; --flat:#5f86a0; --sq:#4a5357; --sqlock:#2c3236; --sqpart:#3b4347; --good:#6cc48a; --warn:#e2a64a; } }
+  :root[data-theme="dark"] { color-scheme: dark; --bg:#141414; --ink:#e6e6e6; --muted:#8a8a8a; --line:#333; --wall:#e0a15a; --accent:#4fb3bc; --record:#f08a5d; --flat:#5f86a0; --sq:#4a5357; --sqlock:#2c3236; --sqpart:#3b4347; --good:#6cc48a; --warn:#e2a64a; }
+  body { background: var(--bg); color: var(--ink); font: 12px/1.35 var(--mono); }
+  .wrap { display: grid; grid-template-columns: minmax(0, 1fr) 270px; gap: 12px; padding-inline: 16px; padding-block: 10px; max-width: 1300px; margin: 0 auto; align-items: start; }
+  @media (max-width: 760px) { .wrap { grid-template-columns: minmax(0, 1fr); } }
+  canvas { width: min(100%, calc(100vh - 60px)); height: auto; max-width: 100%; aspect-ratio: 1; display: block; touch-action: none; cursor: grab; }
+  canvas.dragging { cursor: grabbing; }
+  .ro { display: flex; flex-wrap: wrap; gap: 2px 14px; color: var(--muted); font-variant-numeric: tabular-nums; margin-top: 4px; }
+  .ro b { color: var(--ink); font-weight: 500; }
+  .side { display: grid; gap: 2px; }
+  .h { color: var(--muted); text-transform: uppercase; letter-spacing: .08em; font-size: 10px; margin-top: 8px; border-bottom: 1px solid var(--line); padding-bottom: 2px; }
+  .r { display: grid; grid-template-columns: 92px 1fr 44px; gap: 6px; align-items: center; }
+  .r input[type=range] { width: 100%; margin: 0; accent-color: var(--accent); height: 14px; }
+  .r output { text-align: right; color: var(--muted); font-variant-numeric: tabular-nums; }
+  .b { display: flex; flex-wrap: wrap; gap: 3px; }
+  button { font: 12px var(--mono); background: none; color: var(--ink); border: 1px solid var(--line); border-radius: 3px; padding: 2px 6px; cursor: pointer; }
+  button:hover { border-color: var(--ink); }
+  button:focus-visible, input:focus-visible { outline: 1px solid var(--accent); outline-offset: 1px; }
+  button[aria-pressed="true"], button.primary { background: var(--ink); color: var(--bg); border-color: var(--ink); }
+  .num { width: 46px; font: 12px var(--mono); padding: 1px 3px; border: 1px solid var(--line); border-radius: 3px; background: none; color: var(--ink); }
+  label.c { display: flex; gap: 4px; align-items: center; }
+  .pad { display: grid; grid-template-columns: repeat(3, 24px); gap: 2px; }
+  .pad button { padding: 1px 0; }
+  .pill { font: inherit; }
+  .pill { color: var(--ink); }
+  details.adv summary { list-style: none; } details.adv summary::-webkit-details-marker { display: none; } details.adv summary::before { content: '▸ '; } details.adv[open] summary::before { content: '▾ '; } details.adv { display: grid; gap: 2px; }
+  .legend-bar, .legend, .hint, header { display: none; }
+
+  [hidden], #win[hidden] { display: none !important; }
+  #win { position: fixed; inset: 0; background: rgba(0,0,0,.55); display: grid; place-items: center; z-index: 10; padding-inline: 16px; }
+  #win .box { background: var(--bg); color: var(--ink); border: 2px solid var(--record); max-width: 560px; width: 100%; padding: 16px; display: grid; gap: 8px; }
+  #win h2 { margin: 0; font: 600 18px var(--mono); color: var(--record); }
+  #win textarea { width: 100%; height: 120px; font: 11px var(--mono); background: none; color: var(--ink); border: 1px solid var(--line); resize: vertical; }
+  body.frozen .wrap { pointer-events: none; filter: grayscale(.4); }
+</style>
+
+<div id="win" hidden role="alertdialog" aria-modal="true" aria-labelledby="win-h">
+  <div class="box">
+    <h2 id="win-h">Below the known record</h2>
+    <div id="win-msg"></div>
+    <div>Simulation frozen. Coordinates (n, certified s, then x y angle per square):</div>
+    <textarea id="win-coords" readonly></textarea>
+    <div class="b"><button id="win-copy" class="primary">copy coordinates</button><button id="win-close">unfreeze and continue</button><span id="win-copied" style="color:var(--muted)"></span></div>
+  </div>
+</div>
+<div class="wrap">
+  <div>
+    <canvas id="cv" width="800" height="800" aria-label="Packing simulation"></canvas>
+    <div class="ro">
+      <span><span id="state" class="pill st-idle">ready</span></span>
+      <span>s <b id="ro-s">–</b></span><span>rec <b id="ro-rec">–</b></span><span>gap <b id="ro-gap">–</b></span>
+      <span>best <b id="ro-best">–</b></span><span>fill <b id="ro-phi">–</b></span><span>E <b id="ro-e">–</b></span><span>r <b id="ro-r">–</b></span><span>step <b id="ro-steps">0</b></span>
+    </div>
+  </div>
+  <div class="side">
+    <div class="h">run</div>
+    <div class="b"><label for="n-in">n</label><input id="n-in" class="num" type="number" min="2" max="120" value="55"><button id="b-new" class="primary">new</button>
+      <button id="b-play" aria-pressed="false" title="Space">▶ Play</button><button id="b-step">step</button><button id="b-auto">full run</button><button id="b-best" title="restore the best valid square packing found for this n">best</button></div>
+    <div class="r"><label for="speed">steps/frame</label><input id="speed" type="range" min="1" max="30" value="6"><output id="o-speed">6</output></div>
+
+    <div class="h">box</div>
+    <div class="r"><label for="wall">wall speed</label><input id="wall" type="range" min="1" max="100" value="45"><output id="o-wall"></output></div>
+    <div class="r"><label for="shake">shake</label><input id="shake" type="range" min="0" max="100" value="40"><output id="o-shake"></output></div>
+    <div class="b"><label class="c"><input id="fade" type="checkbox" checked>fade</label><label class="c" title="when compression stalls, shake at fixed size before retrying"><input id="settle" type="checkbox" checked>settle</label><label class="c" title="lock squares flush on two adjacent sides with walls or locked squares (2 walls; wall + locked; 2 locked). Locked squares stay tied to those two contacts, permanently."><input id="lock" type="checkbox">lock</label><span class="b" role="group" aria-label="Box mode">box <button data-box="shrink" aria-pressed="true" title="strictly shrinking: walls only move inward">&lt;</button><button data-box="hold" aria-pressed="false" title="hold size: box fixed, shake and re-settle">=</button><button data-box="free" aria-pressed="false" title="free: box size floats, can grow or shrink">~</button></span>
+      <button id="b-exp3">+3%</button><button id="b-exp10">+10%</button></div>
+
+    <div class="h">shape</div>
+    <div class="r"><label for="round">rounding r</label><input id="round" type="range" min="0" max="50" value="20"><output id="o-round"></output></div>
+    <div class="b"><button id="b-harden">harden</button><button id="b-tight">tighten</button></div>
+    <div class="b"><label class="c" title="squares keep their angles: no rotation anywhere"><input id="norot" type="checkbox">no rotation</label></div>
+
+
+    <details class="adv"><summary class="h" style="cursor:pointer">advanced</summary>
+      <label class="c" title="squares flush with exactly one wall or locked square may only move outward, toward the edges"><input id="lock-outward" type="checkbox">one anchor: outward only (experimental, can stall)</label>
+      <label class="c" title="when fixing overlaps, only slide squares, never turn them"><input id="repair-norot" type="checkbox" checked>repair: no rotate</label>
+    </details>
+    <div class="h">wind</div>
+    <div class="b" style="gap:8px; align-items:flex-start">
+      <div class="pad" role="group" aria-label="Wind direction">
+        <button data-w="-1,1" aria-pressed="false">↖</button><button data-w="0,1" aria-pressed="false">↑</button><button data-w="1,1" aria-pressed="false">↗</button>
+        <button data-w="-1,0" aria-pressed="false">←</button><button data-w="off" aria-pressed="true">·</button><button data-w="1,0" aria-pressed="false">→</button>
+        <button data-w="-1,-1" aria-pressed="false">↙</button><button data-w="0,-1" aria-pressed="false">↓</button><button data-w="1,-1" aria-pressed="false">↘</button>
+      </div>
+      <div class="b" style="flex-direction:column; gap:2px"><button data-w="out" aria-pressed="false">out</button><button data-w="in" aria-pressed="false">in</button><button data-w="seq" aria-pressed="false">20 random</button></div>
+    </div>
+    <div class="r"><label for="wstr">strength</label><input id="wstr" type="range" min="0" max="100" value="40"><output id="o-wstr"></output></div>
+    <div id="wind-now" style="color:var(--muted)">wind: off</div>
+  </div>
+</div>
+
+<script>
+const RECORDS = {"1":1.0,"2":2.0,"3":2.0,"4":2.0,"5":2.707106781,"6":3.0,"7":3.0,"8":3.0,"9":3.0,"10":3.707106781,"11":3.87708359,"12":4,"13":4.0,"14":4.0,"15":4.0,"16":4,"17":4.675530094,"18":4.822875656,"19":4.885618083,"20":5,"21":5,"22":5.0,"23":5.0,"24":5.0,"25":5,"26":5.621320344,"27":5.707106781,"28":5.824444617,"29":5.933833463,"30":6,"31":6,"32":6,"33":6.0,"34":6.0,"35":6.0,"36":6,"37":6.598619609,"38":6.707106781,"39":6.810722083,"40":6.828427125,"41":6.926693094,"42":7,"43":7,"44":7,"45":7,"46":7.0,"47":7.0,"48":7.0,"49":7,"50":7.571428571,"51":7.700799235,"52":7.707106781,"53":7.822875656,"54":7.846667193,"55":7.945771008,"56":8,"57":8,"58":8,"59":8,"60":8,"61":8,"62":8.0,"63":8.0,"64":8,"65":8.535533906,"66":8.656854249,"67":8.707106781,"68":8.79879614,"69":8.827194656,"70":8.881666757,"71":8.944071558,"72":9,"73":9,"74":9,"75":9,"76":9,"77":9,"78":9,"79":9.0,"80":9.0,"81":9,"82":9.535533906,"83":9.634757649,"84":9.707106781,"85":9.742640687,"86":9.822875656,"87":9.83881527,"88":9.888153054,"89":9.949747468,"90":10,"91":10,"92":10,"93":10,"94":10,"95":10,"96":10,"97":10,"98":10.0,"99":10.0,"100":10,"101":10.535533906,"102":10.611387941,"103":10.703781955,"104":10.707106781,"105":10.807619333,"106":10.822979734,"107":10.846667193,"108":10.92591939,"109":10.949747468,"110":10.996793274,"111":11,"112":11,"113":11,"114":11,"115":11,"116":11,"117":11,"118":11,"119":11.0,"120":11.0};
+
+// ---------- simulation core (port of the v5 C engine) ----------
+let userRound = 20;   // rounding the user last chose (new starts use it)
+let SYM_LREF = null;   // during a box-size solve: box centre fixed at SYM_LREF/2 (all four walls move)
+let n = 55, R = 0.2, H = 0.3, ASP = 1;
+let z = new Float64Array(1), g = new Float64Array(1);
+const KX = [-1, 1, 1, -1], KY = [-1, -1, 1, 1];
+const sgn = a => a > 0 ? 1 : (a < 0 ? -1 : 0);
+let C, S, VX, VY;
+function alloc() { LOCK = new Uint8Array(n); PERM = null; z = new Float64Array(3 * n + 1); g = new Float64Array(3 * n + 1); C = new Float64Array(n); S = new Float64Array(n); VX = new Float64Array(4 * n); VY = new Float64Array(4 * n); }
+function setR(r) { R = r; H = 0.5 - r; }
+function randn() { let u = 0; while (u === 0) u = Math.random(); return Math.sqrt(-2 * Math.log(u)) * Math.cos(2 * Math.PI * Math.random()); }
+
+function energy(z, gr) {
+  const L = z[3 * n]; let E = 0;
+  const W0 = SYM_LREF === null ? 0 : (SYM_LREF - L) / 2, symw = SYM_LREF !== null;
+  if (gr) gr.fill(0);
+  for (let i = 0; i < n; i++) {
+    const c = Math.cos(z[2 * n + i]), s = Math.sin(z[2 * n + i]); C[i] = c; S[i] = s;
+    for (let k = 0; k < 4; k++) { const kx = KX[k] * H, ky = KY[k] * H; VX[4 * i + k] = z[i] + c * kx - s * ky; VY[4 * i + k] = z[n + i] + s * kx + c * ky; }
+    const w = H * (Math.abs(c) + Math.abs(s)) + R, dw = H * (-sgn(c) * s + sgn(s) * c);
+    if (symw) {                 // symmetric walls [W0, W0+L]: dW0/dL = -1/2, d(W0+L)/dL = +1/2
+      let v = w - (z[i] - W0);       if (v > 0) { E += v * v; if (gr) { gr[i] -= 2 * v; gr[2 * n + i] += 2 * v * dw; gr[3 * n] -= v; } }
+      v = z[i] + w - (W0 + L);       if (v > 0) { E += v * v; if (gr) { gr[i] += 2 * v; gr[2 * n + i] += 2 * v * dw; gr[3 * n] -= v; } }
+      v = w - (z[n + i] - W0);       if (v > 0) { E += v * v; if (gr) { gr[n + i] -= 2 * v; gr[2 * n + i] += 2 * v * dw; gr[3 * n] -= v; } }
+      v = z[n + i] + w - (W0 + L);   if (v > 0) { E += v * v; if (gr) { gr[n + i] += 2 * v; gr[2 * n + i] += 2 * v * dw; gr[3 * n] -= v; } }
+      continue;
+    }
+    let v = w - z[i];            if (v > 0) { E += v * v; if (gr) { gr[i] -= 2 * v; gr[2 * n + i] += 2 * v * dw; } }
+    v = z[i] + w - L * ASP;      if (v > 0) { E += v * v; if (gr) { gr[i] += 2 * v; gr[2 * n + i] += 2 * v * dw; gr[3 * n] -= 2 * v * ASP; } }
+    v = w - z[n + i];            if (v > 0) { E += v * v; if (gr) { gr[n + i] -= 2 * v; gr[2 * n + i] += 2 * v * dw; } }
+    v = z[n + i] + w - L / ASP;  if (v > 0) { E += v * v; if (gr) { gr[n + i] += 2 * v; gr[2 * n + i] += 2 * v * dw; gr[3 * n] -= 2 * v / ASP; } }
+  }
+  const rho = H * Math.SQRT2 + R, cut2 = 4 * rho * rho;
+  for (let i = 0; i < n; i++) for (let j = i + 1; j < n; j++) {
+    const dx = z[j] - z[i], dy = z[n + j] - z[n + i];
+    if (dx * dx + dy * dy >= cut2) continue;
+    let best = 1e9, bk = 0;
+    for (let k = 0; k < 4; k++) {
+      const o = k < 2 ? i : j, q = k < 2 ? j : i;
+      const ax = (k & 1) ? -S[o] : C[o], ay = (k & 1) ? C[o] : S[o];
+      const p1 = ax * C[q] + ay * S[q], p2 = -ax * S[q] + ay * C[q];
+      const ov = H + H * (Math.abs(p1) + Math.abs(p2)) - Math.abs(ax * dx + ay * dy);
+      if (ov < best) { best = ov; bk = k; }
+    }
+    if (best > 0) {
+      const pen = 2 * R + best; E += pen * pen;
+      if (gr) {
+        const k = bk, o = k < 2 ? i : j, q = k < 2 ? j : i;
+        const ax = (k & 1) ? -S[o] : C[o], ay = (k & 1) ? C[o] : S[o], bx = -ay, by = ax;
+        const u1x = C[q], u1y = S[q], u2x = -S[q], u2y = C[q];
+        const p1 = ax * u1x + ay * u1y, p2 = ax * u2x + ay * u2y, sp1 = sgn(p1), sp2 = sgn(p2), sp = sgn(ax * dx + ay * dy);
+        const dho = H * (sp1 * (bx * u1x + by * u1y) + sp2 * (bx * u2x + by * u2y));
+        const dhq = H * (sp1 * (ax * u2x + ay * u2y) - sp2 * (ax * u1x + ay * u1y));
+        const m2 = 2 * pen;
+        gr[2 * n + o] += m2 * (dho - sp * (bx * dx + by * dy)); gr[2 * n + q] += m2 * dhq;
+        gr[j] -= m2 * sp * ax; gr[i] += m2 * sp * ax; gr[n + j] -= m2 * sp * ay; gr[n + i] += m2 * sp * ay;
+      }
+      continue;
+    }
+    if (R <= 0) continue;
+    let db = 1e9, bA = 0, bB = 0, bv = 0, be = 0, bt = 0;
+    for (let dir = 0; dir < 2; dir++) {
+      const a = dir ? j : i, b = dir ? i : j;
+      for (let v = 0; v < 4; v++) for (let e = 0; e < 4; e++) {
+        const p0x = VX[4 * b + e], p0y = VY[4 * b + e], ex = VX[4 * b + ((e + 1) & 3)] - p0x, ey = VY[4 * b + ((e + 1) & 3)] - p0y;
+        const ee = ex * ex + ey * ey; let t = ee > 1e-24 ? ((VX[4 * a + v] - p0x) * ex + (VY[4 * a + v] - p0y) * ey) / ee : 0;
+        if (t < 0) t = 0; if (t > 1) t = 1;
+        const qx = p0x + t * ex - VX[4 * a + v], qy = p0y + t * ey - VY[4 * a + v], d2 = qx * qx + qy * qy;
+        if (d2 < db) { db = d2; bA = a; bB = b; bv = v; be = e; bt = t; }
+      }
+    }
+    const d = Math.sqrt(db), pen = 2 * R - d;
+    if (pen <= 0) continue;
+    E += pen * pen;
+    if (gr && d > 1e-15) {
+      const a = bA, b = bB, e1 = (be + 1) & 3, vx = VX[4 * a + bv], vy = VY[4 * a + bv];
+      const qx = VX[4 * b + be] + bt * (VX[4 * b + e1] - VX[4 * b + be]), qy = VY[4 * b + be] + bt * (VY[4 * b + e1] - VY[4 * b + be]);
+      const ux = (vx - qx) / d, uy = (vy - qy) / d, m = -2 * pen;
+      gr[a] += m * ux; gr[n + a] += m * uy; gr[2 * n + a] += m * (ux * -(vy - z[n + a]) + uy * (vx - z[a]));
+      gr[b] -= m * ux; gr[n + b] -= m * uy;
+      const r0x = VX[4 * b + be] - z[b], r0y = VY[4 * b + be] - z[n + b], r1x = VX[4 * b + e1] - z[b], r1y = VY[4 * b + e1] - z[n + b];
+      const px = (1 - bt) * -r0y + bt * -r1y, py = (1 - bt) * r0x + bt * r1x;
+      gr[2 * n + b] -= m * (ux * px + uy * py);
+    }
+  }
+  return E;
+}
+
+// objective: mode "fixed" (box fixed, minimise overlap) or "joint" (minimise L + mu*E)
+let MODE = "fixed", MU = 1;
+function noRotNow() { return document.getElementById("norot").checked || (repairing && document.getElementById("repair-norot").checked); }
+function objective(zz, gr) {
+  const framed = lockOn && PERM && PERM.length === n;
+  if (framed) {                                   // locked squares sit at their frame position for this box size
+    const L = zz[3 * n];
+    const W0 = SYM_LREF === null ? 0 : (SYM_LREF - L) / 2;
+    for (let i = 0; i < n; i++) if (PERM[i]) { zz[i] = W0 + (PANX[i] === 1 ? L - POFX[i] : POFX[i]); zz[n + i] = W0 + (PANY[i] === 1 ? L - POFY[i] : POFY[i]); zz[2 * n + i] = PANG[i]; }
+  }
+  const E = energy(zz, gr);
+  if (framed && gr) for (let i = 0; i < n; i++) if (PERM[i]) {   // their pushes move the walls they are attached to
+    const cx = SYM_LREF === null ? (PANX[i] === 1 ? 1 : 0) : (PANX[i] === 1 ? 0.5 : -0.5);   // dx/dL of a locked square
+    const cy = SYM_LREF === null ? (PANY[i] === 1 ? 1 : 0) : (PANY[i] === 1 ? 0.5 : -0.5);
+    gr[3 * n] += cx * gr[i] + cy * gr[n + i];
+    gr[i] = 0; gr[n + i] = 0; gr[2 * n + i] = 0;
+  }
+  if (gr && noRotNow()) for (let i = 0; i < n; i++) gr[2 * n + i] = 0;
+  if (gr && stepping && lockOn && LOCK.length === n) for (let i = 0; i < n; i++) {
+    if (LOCK[i] === 2 || (PERM && PERM[i])) { gr[i] = 0; gr[n + i] = 0; gr[2 * n + i] = 0; }
+    else if (LOCK[i] === 1) {                                   // descent may not point toward the centre
+      const [rx, ry] = outwardDir(i), gdot = gr[i] * rx + gr[n + i] * ry;
+      if (gdot > 0) { gr[i] -= gdot * rx; gr[n + i] -= gdot * ry; }
+    }
+  }
+  if (MODE === "fixed") { if (gr) gr[3 * n] = 0; return E; }
+  if (gr) { for (let a = 0; a <= 3 * n; a++) gr[a] *= MU; gr[3 * n] += 1; }
+  return zz[3 * n] + MU * E;
+}
+const MEM = 8;
+function lbfgs(z, maxit, ftol) {
+  const N = 3 * n + 1;
+  const Ss = [], Ys = [], rho = [], alpha = new Float64Array(MEM);
+  const gg = new Float64Array(N), d = new Float64Array(N), zn = new Float64Array(N), gn = new Float64Array(N);
+  let F = objective(z, gg);
+  for (let it = 0; it < maxit; it++) {
+    for (let a = 0; a < N; a++) d[a] = -gg[a];
+    const m = Ss.length;
+    for (let l = m - 1; l >= 0; l--) { let dot = 0; for (let a = 0; a < N; a++) dot += Ss[l][a] * d[a]; alpha[l] = rho[l] * dot; for (let a = 0; a < N; a++) d[a] -= alpha[l] * Ys[l][a]; }
+    if (m > 0) { let sy = 0, yy = 0; for (let a = 0; a < N; a++) { sy += Ss[m - 1][a] * Ys[m - 1][a]; yy += Ys[m - 1][a] * Ys[m - 1][a]; } if (yy > 0) { const gam = sy / yy; for (let a = 0; a < N; a++) d[a] *= gam; } }
+    else { let s2 = 0; for (let a = 0; a < N; a++) s2 += gg[a] * gg[a]; const sc = 0.01 / (Math.sqrt(s2) + 1e-300); for (let a = 0; a < N; a++) d[a] *= sc; }
+    for (let l = 0; l < m; l++) { let dot = 0; for (let a = 0; a < N; a++) dot += Ys[l][a] * d[a]; const b = rho[l] * dot; for (let a = 0; a < N; a++) d[a] += Ss[l][a] * (alpha[l] - b); }
+    let gd = 0; for (let a = 0; a < N; a++) gd += gg[a] * d[a];
+    if (gd >= 0) { gd = 0; for (let a = 0; a < N; a++) { d[a] = -gg[a]; gd -= gg[a] * gg[a]; } Ss.length = 0; Ys.length = 0; rho.length = 0; }
+    let t = 1, Fn = 0, ok = false;
+    for (let ls = 0; ls < 25; ls++) { for (let a = 0; a < N; a++) zn[a] = z[a] + t * d[a]; Fn = objective(zn, gn); if (Fn <= F + 1e-4 * t * gd) { ok = true; break; } t *= 0.5; }
+    if (!ok) break;
+    const sv = new Float64Array(N), yv = new Float64Array(N); let sy = 0;
+    for (let a = 0; a < N; a++) { sv[a] = zn[a] - z[a]; yv[a] = gn[a] - gg[a]; sy += sv[a] * yv[a]; }
+    if (sy > 1e-30) { Ss.push(sv); Ys.push(yv); rho.push(1 / sy); if (Ss.length > MEM) { Ss.shift(); Ys.shift(); rho.shift(); } }
+    const dec = F - Fn; z.set(zn); gg.set(gn); F = Fn;
+    if (MODE === "fixed" && F < 1e-16) break;
+    if (dec < ftol * (1 + Math.abs(F)) && it > 15) break;
+  }
+  return F;
+}
+function solveJoint(mu0, mu1, maxit) {
+  ASP = 1; SYM_LREF = z[3 * n]; MODE = "joint"; for (MU = mu0; MU <= mu1 * 1.0001; MU *= 10) lbfgs(z, maxit, 1e-13); MODE = "fixed";
+  const W0 = (SYM_LREF - z[3 * n]) / 2; SYM_LREF = null;
+  for (let i = 0; i < n; i++) { z[i] -= W0; z[n + i] -= W0; } const E = energy(z, null); z[3 * n] += 2 * Math.sqrt(E); enforceValid(); }
+
+
+// ---------- validity invariant: every action ends in a non-overlapping state ----------
+let boxMode = "shrink";   // shrink | hold | free
+let repairing = false;    // true while fixing an overlapping state
+const VALID_E = 1e-16;            // overlap energy bound: every overlap <= 1e-8
+let lastValid = null;
+function isValid() { return energy(z, null) <= VALID_E; }
+function enforceValid(allowGrow = true) {
+  const prevMode = MODE, prevRep = repairing, prevStep = stepping; MODE = "fixed"; repairing = true; stepping = true;   // locked squares frozen
+  applyLocks();                                                          // locked squares always sit at their frame position
+  if (!isValid()) lbfgs(z, 800, 1e-18);
+  growUntilValid(allowGrow);
+  for (let round = 0; round < 6 && !isValid() && PERM; round++) {   // locks would force an overlap: release the locked squares involved, repair, repeat
+    const bad = overlappingSquares().filter(i => PERM[i]);
+    if (!bad.length) break;
+    for (const i of bad) releaseLock(i);
+    lbfgs(z, 400, 1e-18); growUntilValid(allowGrow);
+  }
+  if (!isValid() && lastValid && lastValid.length === z.length) z.set(lastValid);   // last resort: snap back
+  MODE = prevMode; repairing = prevRep; stepping = prevStep;
+  if (isValid()) lastValid = new Float64Array(z);
+}
+
+
+// ---------- lock: squares wedged from >= 2 directions are frozen ----------
+let LOCK = new Uint8Array(1), lockOn = false, stepping = false, ANX = new Int8Array(1), ANY = new Int8Array(1);
+let PERM = null, PANX = null, PANY = null, POFX = null, POFY = null, PANG = null, PHX = null, PVY = null;   // frame-relative lock state   // permanent locks: once locked, always locked (until lock off or new start)
+function computeLocks() {
+  // locked = flush (face-to-face) contact in >= 2 directions: aligned faces, touching, sharing >= 1/4 of a side
+  LOCK = new Uint8Array(n); lockOn = document.getElementById("lock").checked;
+  if (!lockOn) { PERM = null; return; }
+  if (!PERM || PERM.length !== n) { PERM = new Uint8Array(n); PANX = new Int8Array(n); PANY = new Int8Array(n); POFX = new Float64Array(n); POFY = new Float64Array(n); PANG = new Float64Array(n); PHX = new Int16Array(n).fill(-2); PVY = new Int16Array(n).fill(-2); }
+  const L = z[3 * n], eps = 0.02, angTol = 0.01, minShare = 0.25, dirs = Array.from({ length: n }, () => []);
+  const onWall = new Uint8Array(n), nbr = Array.from({ length: n }, () => []), nbrDir = Array.from({ length: n }, () => []), wx = new Int8Array(n), wy = new Int8Array(n);
+  ANX = new Int8Array(n); ANY = new Int8Array(n);
+  const tiltOf = t => { const m = ((t % (Math.PI / 2)) + Math.PI / 2) % (Math.PI / 2); return Math.min(m, Math.PI / 2 - m); };
+  for (let i = 0; i < n; i++) {                       // flush against a wall: square axis-aligned and touching
+    if (tiltOf(z[2 * n + i]) > angTol) continue;
+    const w = 0.5;
+    const before = dirs[i].length;
+    if (z[i] - w < eps) { dirs[i].push([-1, 0]); wx[i] = -1; } if (L - z[i] - w < eps) { dirs[i].push([1, 0]); wx[i] = wx[i] ? 2 : 1; }
+    if (z[n + i] - w < eps) { dirs[i].push([0, -1]); wy[i] = -1; } if (L - z[n + i] - w < eps) { dirs[i].push([0, 1]); wy[i] = wy[i] ? 2 : 1; }
+    if (dirs[i].length > before) onWall[i] = dirs[i].length - before;   // number of walls it is flush with
+  }
+  for (let i = 0; i < n; i++) for (let j = i + 1; j < n; j++) {
+    const dx = z[j] - z[i], dy = z[n + j] - z[n + i];
+    if (dx * dx + dy * dy > 2.2) continue;
+    if (tiltOf(z[2 * n + i] - z[2 * n + j]) > angTol) continue;            // faces must be parallel
+    const t = z[2 * n + i], ux = Math.cos(t), uy = Math.sin(t), vx = -uy, vy = ux;
+    for (const [ax, ay, bx, by] of [[ux, uy, vx, vy], [vx, vy, ux, uy]]) {
+      const along = ax * dx + ay * dy, across = bx * dx + by * dy;
+      const gap = Math.abs(along) - 1, shared = 2 * H - Math.abs(across);    // flat parts of the faces
+      if (gap < eps && gap > -eps && shared >= minShare) {
+        const sg = Math.sign(along); dirs[i].push([sg * ax, sg * ay]); dirs[j].push([-sg * ax, -sg * ay]);
+        nbr[i].push(j); nbr[j].push(i); nbrDir[i].push([j, [sg * ax, sg * ay]]); nbrDir[j].push([i, [-sg * ax, -sg * ay]]);
+      }
+    }
+  }
+  // Lock rule: flush with two things on ADJACENT sides (one horizontal contact, one vertical contact),
+  // each being a wall or an already-locked square. A locked square is tied to those two contacts:
+  // its x follows its horizontal contact, its y follows its vertical contact (anchors pass down the chain to the walls).
+  const aligned = i => tiltOf(z[2 * n + i]) <= angTol;
+  // horizontal / vertical contact options per square: {anchor: -1 left/bottom wall, +1 right/top wall, or a square index}
+  const hx = Array.from({ length: n }, () => []), vy = Array.from({ length: n }, () => []);
+  for (let i = 0; i < n; i++) {
+    if (wx[i] === -1 || wx[i] === 2) hx[i].push({ wall: -1 }); if (wx[i] === 1 || wx[i] === 2) hx[i].push({ wall: 1 });
+    if (wy[i] === -1 || wy[i] === 2) vy[i].push({ wall: -1 }); if (wy[i] === 1 || wy[i] === 2) vy[i].push({ wall: 1 });
+    for (const [j, d] of nbrDir[i]) {
+      if (Math.abs(d[0]) > 0.9) hx[i].push({ sq: j }); else if (Math.abs(d[1]) > 0.9) vy[i].push({ sq: j });
+    }
+  }
+  const pick = (opts) => { for (const o of opts) { if (o.wall) return o.wall; if (LOCK[o.sq] === 2) return { sq: o.sq }; } return null; };
+  for (let i = 0; i < n; i++) if (PERM[i]) { LOCK[i] = 2; ANX[i] = PANX[i]; ANY[i] = PANY[i]; }   // existing locks persist
+  let grew = true;
+  while (grew) {
+    grew = false;
+    for (let i = 0; i < n; i++) {
+      if (LOCK[i] === 2 || !aligned(i)) continue;
+      const h = pick(hx[i]), v = pick(vy[i]);
+      if (h === null || v === null) continue;            // needs a horizontal AND a vertical anchor (adjacent sides)
+      LOCK[i] = 2; grew = true;
+      ANX[i] = typeof h === "number" ? h : ANX[h.sq];
+      ANY[i] = typeof v === "number" ? v : ANY[v.sq];
+      if (!PERM[i]) { PHX[i] = typeof h === "number" ? -1 : h.sq; PVY[i] = typeof v === "number" ? -1 : v.sq; }
+    }
+  }
+  // outward-only (experimental): exactly one anchored contact (horizontal or vertical, not both)
+  if (document.getElementById("lock-outward").checked) for (let i = 0; i < n; i++)
+    if (LOCK[i] !== 2 && aligned(i) && ((pick(hx[i]) !== null) !== (pick(vy[i]) !== null))) LOCK[i] = 1;
+  for (let i = 0; i < n; i++) if (LOCK[i] === 2 && !PERM[i]) {        // new lock: remember its distance to its anchor walls
+    PERM[i] = 1; PANX[i] = ANX[i]; PANY[i] = ANY[i];
+    POFX[i] = ANX[i] === 1 ? L - z[i] : z[i]; POFY[i] = ANY[i] === 1 ? L - z[n + i] : z[n + i];
+    PANG[i] = Math.round(z[2 * n + i] / (Math.PI / 2)) * (Math.PI / 2);
+  }
+  applyLocks();
+}
+
+
+function nearestWall(x, y, L) {      // returns [unit normal toward the nearest wall, distance to it]
+  const d = [x, L - x, y, L - y], k = d.indexOf(Math.min(...d));
+  return [[[-1, 0], [1, 0], [0, -1], [0, 1]][k], d[k], k];
+}
+function outwardDir(i) { return nearestWall(z[i], z[n + i], z[3 * n])[0]; }
+// partial locks: undo any inward motion relative to a reference state; returns false if that leaves overlaps
+function enforceOutward(ref) {
+  // outward-only squares may not move away from their nearest wall (distance to it may shrink, never grow)
+  if (!lockOn) return true;
+  let changed = false;
+  const L0 = ref[3 * n], L1 = z[3 * n];
+  for (let i = 0; i < n; i++) if (LOCK[i] === 1) {
+    const [, d0, k] = nearestWall(ref[i], ref[n + i], L0);
+    const d1 = [z[i], L1 - z[i], z[n + i], L1 - z[n + i]][k];
+    if (d1 > d0 + 1e-12) {                       // moved away from that wall: pull it back by the excess
+      const ex = d1 - d0;
+      if (k === 0) z[i] -= ex; else if (k === 1) z[i] += ex; else if (k === 2) z[n + i] -= ex; else z[n + i] += ex;
+      changed = true;
+    }
+  }
+  return !changed || energy(z, null) <= VALID_E;
+}
+
+
+function carryLocked(dL) {
+  if (!lockOn || !dL) return;
+  for (let i = 0; i < n; i++) if (LOCK[i] === 2) {
+    if (ANX[i] === 1) z[i] += dL; else if (ANX[i] === 2) z[i] += dL / 2;
+    if (ANY[i] === 1) z[n + i] += dL; else if (ANY[i] === 2) z[n + i] += dL / 2;
+  }
+}
+
+
+// shrink (or grow) the box about its centre: all four walls move by dL/2.
+// Free squares shift by dL/2; locked squares keep their distance to the walls they follow.
+function centerShift(dL) {
+  if (!dL) return;
+  for (let i = 0; i < n; i++) {
+    let sx = dL / 2, sy = dL / 2;
+    if (lockOn && LOCK[i] === 2) {
+      sx = ANX[i] === -1 ? 0 : ANX[i] === 1 ? dL : dL / 2;
+      sy = ANY[i] === -1 ? 0 : ANY[i] === 1 ? dL : dL / 2;
+    }
+    z[i] += sx; z[n + i] += sy;
+  }
+}
+
+
+function applyLocks() {
+  if (!lockOn || !PERM || PERM.length !== n) return;
+  const L = z[3 * n];
+  for (let i = 0; i < n; i++) if (PERM[i]) {
+    z[i] = PANX[i] === 1 ? L - POFX[i] : POFX[i];
+    z[n + i] = PANY[i] === 1 ? L - POFY[i] : POFY[i];
+    z[2 * n + i] = PANG[i];
+  }
+}
+
+
+function overlappingSquares() {     // squares involved in any overlap or wall crossing (current shape)
+  const out = new Set(), L = z[3 * n];
+  for (let i = 0; i < n; i++) {
+    const c = Math.cos(z[2 * n + i]), s = Math.sin(z[2 * n + i]), w = H * (Math.abs(c) + Math.abs(s)) + R;
+    if (Math.max(w - z[i], z[i] + w - L, w - z[n + i], z[n + i] + w - L) > 1e-8) out.add(i);
+  }
+  const rho = H * Math.SQRT2 + R;
+  for (let i = 0; i < n; i++) for (let j = i + 1; j < n; j++) {
+    const dx = z[j] - z[i], dy = z[n + j] - z[n + i]; if (dx * dx + dy * dy >= 4 * rho * rho) continue;
+    let ov = 1e9;
+    for (const t of [z[2 * n + i], z[2 * n + i] + Math.PI / 2, z[2 * n + j], z[2 * n + j] + Math.PI / 2]) {
+      const ax = Math.cos(t), ay = Math.sin(t);
+      const hi = H * (Math.abs(ax * Math.cos(z[2 * n + i]) + ay * Math.sin(z[2 * n + i])) + Math.abs(-ax * Math.sin(z[2 * n + i]) + ay * Math.cos(z[2 * n + i])));
+      const hj = H * (Math.abs(ax * Math.cos(z[2 * n + j]) + ay * Math.sin(z[2 * n + j])) + Math.abs(-ax * Math.sin(z[2 * n + j]) + ay * Math.cos(z[2 * n + j])));
+      ov = Math.min(ov, hi + hj + 2 * R - Math.abs(ax * dx + ay * dy));
+    }
+    if (ov > 1e-8) { out.add(i); out.add(j); }
+  }
+  return [...out];
+}
+
+
+function growUntilValid(allowGrow) {     // make room: spread squares and box by 0.3% at a time (<= ~35%), relaxing in between
+  for (let k = 0; k < 100 && allowGrow && !isValid(); k++) {
+    const f = 1.003; z[3 * n] *= f; for (let i = 0; i < n; i++) { z[i] *= f; z[n + i] *= f; }
+    applyLocks(); lbfgs(z, 120, 1e-18);
+  }
+}
+
+
+function releaseLock(i0) {             // release a lock and every lock that depended on it (directly or through a chain)
+  if (!PERM) return;
+  const stack = [i0];
+  while (stack.length) { const i = stack.pop(); if (!PERM[i]) continue; PERM[i] = 0;
+    for (let j = 0; j < n; j++) if (PERM[j] && (PHX[j] === i || PVY[j] === i)) stack.push(j); }
+}
+
+// ---------- state ----------
+const S0 = { state: "idle", steps: 0, wallStep: 0.004, phi0: 0, jamSince: 0, harden: null, auto: false, playing: false };
+let st = { ...S0 };
+let wind = { mode: "off", dx: 0, dy: 0 }, windSeq = null;
+const WIND_OPTS = [["dir", -1, 1, "↖"], ["dir", 0, 1, "↑"], ["dir", 1, 1, "↗"], ["dir", -1, 0, "←"], ["dir", 1, 0, "→"], ["dir", -1, -1, "↙"], ["dir", 0, -1, "↓"], ["dir", 1, -1, "↘"], ["out", 0, 0, "out"], ["in", 0, 0, "in"]];
+
+function phiNow() { const L = z[3 * n]; return n * (4 * H * H + 8 * H * R + Math.PI * R * R) / (L * L); }
+function newStart() {
+  n = Math.max(2, Math.min(120, parseInt(document.getElementById("n-in").value) || 55));
+  document.getElementById("n-in").value = n;
+  const rs = document.getElementById("round"); rs.value = userRound; document.getElementById("o-round").textContent = (userRound / 100).toFixed(2);
+  alloc(); setR(userRound / 100); ASP = 1;
+  const L = 2 * Math.sqrt(n) + 1;
+  const X = [], Y = [], T = [];
+  let tries = 0;
+  while (X.length < n && tries < 200000) {
+    tries++;
+    const x = 0.75 + Math.random() * (L - 1.5), y = 0.75 + Math.random() * (L - 1.5), t = Math.random() * Math.PI / 2;
+    let ok = true;
+    for (let j = 0; j < X.length && ok; j++) { if ((x - X[j]) ** 2 + (y - Y[j]) ** 2 < 2.1) ok = false; }   // conservative: circumscribed circles apart
+    if (ok) { X.push(x); Y.push(y); T.push(t); }
+  }
+  for (let i = 0; i < n; i++) { z[i] = X[i]; z[n + i] = Y[i]; z[2 * n + i] = T[i]; }
+  z[3 * n] = L;
+  st = { ...S0, playing: st.playing, auto: false, wallStep: wallMax(), phi0: phiNow() };
+  if (wind.mode === "seq") windSeq = Array.from({ length: 20 }, () => WIND_OPTS[Math.floor(Math.random() * WIND_OPTS.length)]);
+  viewL = L * 1.03; lastClaim = Infinity; lastValid = new Float64Array(z); snapDisplay(); setState("idle"); draw(); updateReadouts();
+}
+const wallMax = () => 0.0005 + 0.0115 * (+document.getElementById("wall").value / 100);
+const shakeAmp = () => 0.35 * (+document.getElementById("shake").value / 100);
+
+const windAmp = () => 2.0 * (+document.getElementById("wstr").value / 100);
+
+function currentWind() {
+  if (wind.mode !== "seq") return wind;
+  if (!windSeq) return { mode: "off" };
+  const prog = Math.max(0, Math.min(0.999, (phiNow() - st.phi0) / Math.max(1e-6, 0.85 - st.phi0)));
+  const w = windSeq[Math.floor(prog * windSeq.length)];
+  return { mode: w[0], dx: w[1], dy: w[2], label: w[3] };
+}
+function windAt(w, x, y) {
+  if (w.mode === "dir") { const m = Math.hypot(w.dx, w.dy) || 1; return [w.dx / m, w.dy / m]; }
+  if (w.mode === "out" || w.mode === "in") { const L = z[3 * n], dx = x - L * ASP / 2, dy = y - L / ASP / 2, r = Math.hypot(dx, dy) + 1e-9, s = w.mode === "out" ? 1 : -1; return [s * dx / r, s * dy / r]; }
+  return [0, 0];
+}
+
+// one compression step (or a shake-only step when holding the box)
+function compressStep() {
+  computeLocks();
+  if (boxMode === "free") { freeStep(); return; }
+  const hold = boxMode === "hold";
+  const phi = phiNow();
+  const fade = document.getElementById("fade").checked ? Math.min(1, Math.max(0, 1 - phi) / 0.5) : 1;
+  const sh = shakeAmp() * fade;
+  const w = currentWind(), wa = windAmp();
+  const save = new Float64Array(z);
+  let ok = false;
+  for (let att = 0; att < 5 && !ok; att++) {
+    z.set(save);
+    if (!hold) { const L0 = z[3 * n]; z[3 * n] *= (1 - st.wallStep); centerShift(z[3 * n] - L0); applyLocks(); }
+    ASP = 1;                                            // box is always square
+    for (let i = 0; i < n; i++) {
+      if (lockOn && LOCK[i] === 2) continue;
+      const [ux, uy] = windAt(w, z[i], z[n + i]);
+      { let jx = sh * (randn() + wa * ux), jy = sh * (randn() + wa * uy);
+        if (lockOn && LOCK[i] === 1) { const [rx, ry] = outwardDir(i), d = jx * rx + jy * ry; if (d < 0) { jx -= d * rx; jy -= d * ry; } }
+        z[i] += jx; z[n + i] += jy; } if (!document.getElementById("norot").checked) z[2 * n + i] += 2 * sh * randn();
+    }
+    const E = lbfgs(z, 400, 1e-18);
+    ok = E <= VALID_E && enforceOutward(save);
+  }
+  if (!ok) {
+    z.set(save);
+    if (!hold) {
+      if (document.getElementById("settle").checked && (st.settled || 0) < 4) {
+        // compression stalled: shake at fixed size (full strength, valid results only), then retry
+        const amp = Math.max(shakeAmp() * 0.6, 0.01);
+        for (let k = 0; k < 8; k++) {
+          const s2 = new Float64Array(z);
+          for (let i = 0; i < n; i++) {
+            if (lockOn && LOCK[i] === 2) continue;
+            const [ux, uy] = windAt(w, z[i], z[n + i]);
+            { let jx = amp * (randn() + wa * ux), jy = amp * (randn() + wa * uy);
+              if (lockOn && LOCK[i] === 1) { const [rx, ry] = outwardDir(i), d = jx * rx + jy * ry; if (d < 0) { jx -= d * rx; jy -= d * ry; } }
+              z[i] += jx; z[n + i] += jy; } if (!document.getElementById("norot").checked) z[2 * n + i] += 2 * amp * randn();
+          }
+          if (lbfgs(z, 400, 1e-18) > VALID_E || !enforceOutward(s2)) z.set(s2);
+        }
+        st.settled = (st.settled || 0) + 1;
+      } else { st.wallStep *= 0.5; st.settled = 0; }
+    }
+  }
+  else if (!hold) { st.wallStep = Math.min(st.wallStep * 1.05, wallMax()); st.settled = 0; }
+  st.steps++;
+  enforceValid(false);                                   // strict / hold: never grow the box; snap back if needed
+  if (!hold && st.wallStep < 2e-5) {           // jammed: restore a square box and stop compressing
+    ASP = 1; enforceValid(false); setState(R === 0 ? "done" : "jammed");
+    if (st.auto) startHarden();
+  }
+}
+
+
+function freeStep() {
+  const phi = phiNow();
+  const fade = document.getElementById("fade").checked ? Math.min(1, Math.max(0, 1 - phi) / 0.5) : 1;
+  const sh = Math.max(shakeAmp() * fade, 0.01), w = currentWind(), wa = windAmp();
+  ASP = 1;
+  for (let i = 0; i < n; i++) {
+    if (lockOn && LOCK[i] === 2) continue;
+    const [ux, uy] = windAt(w, z[i], z[n + i]);
+    { let jx = sh * (randn() + wa * ux), jy = sh * (randn() + wa * uy);
+      if (lockOn && LOCK[i] === 1) { const [rx, ry] = outwardDir(i), d = jx * rx + jy * ry; if (d < 0) { jx -= d * rx; jy -= d * ry; } }
+      z[i] += jx; z[n + i] += jy; } if (!document.getElementById("norot").checked) z[2 * n + i] += 2 * sh * randn();
+  }
+  solveJoint(3e2, 3e4, 200);     // box size floats; locked squares ride along with the frame inside the solver
+  st.steps++;
+}
+
+function startHarden() {
+  const r0 = R, K = r0 > 0 ? 14 : 1;
+  ASP = 1; st.harden = { r0, K, k: 0 }; setState("harden");
+}
+function hardenStep() {
+  const h = st.harden; h.k++;
+  const f = h.k / h.K, r = h.k >= h.K ? 0 : h.r0 * Math.pow(1 - f, 1.5);
+  setR(r); solveJoint(3e3, h.k >= h.K ? 3e6 : 3e4, 300);
+  const sl = document.getElementById("round"); sl.value = Math.round(r * 100); document.getElementById("o-round").textContent = r.toFixed(2);
+  enforceValid();
+  if (h.k >= h.K) { st.harden = null; setState("done"); }
+}
+function tighten() { ASP = 1; solveJoint(3e3, 3e6, 600); setState(R === 0 ? "done" : "jammed"); draw(); updateReadouts(); }
+
+// ---------- rendering ----------
+const cv = document.getElementById("cv"), ctx = cv.getContext("2d");
+let viewL = 10;
+function css(name) { return getComputedStyle(document.documentElement).getPropertyValue(name).trim(); }
+function tiltColor(t) {
+  let a = ((t % (Math.PI / 2)) + Math.PI / 2) % (Math.PI / 2); a = Math.min(a, Math.PI / 2 - a) * 180 / Math.PI;   // 0..45
+  if (a < 0.6) return css("--flat");
+  const stops = [[0, [59, 79, 156]], [12, [123, 63, 143]], [24, [178, 64, 90]], [35, [208, 122, 53]], [45, [222, 170, 70]]];
+  for (let k = 1; k < stops.length; k++) if (a <= stops[k][0]) {
+    const [a0, c0] = stops[k - 1], [a1, c1] = stops[k], f = (a - a0) / (a1 - a0);
+    return `rgb(${c0.map((c, i) => Math.round(c + f * (c1[i] - c))).join(",")})`;
+  }
+  return "rgb(222,170,70)";
+}
+function resizeCanvas() { const dpr = window.devicePixelRatio || 1, w = Math.min(cv.clientWidth, cv.clientHeight || cv.clientWidth), px = Math.round(w * dpr); if (cv.width !== px || cv.height !== px) { cv.width = px; cv.height = px; } }
+let disp = null, dispASP = 1;   // eased display coordinates and box aspect (visual only)
+function snapDisplay() { disp = new Float64Array(z); dispASP = ASP; }
+function easeDisplay() {
+  if (!disp || disp.length !== z.length) { snapDisplay(); return; }
+  const a = 1;   // no interpolation: always draw the exact (valid) end-of-step state
+  for (let i = 0; i < n; i++) {
+    disp[i] += (z[i] - disp[i]) * a; disp[n + i] += (z[n + i] - disp[n + i]) * a;
+    let d = z[2 * n + i] - disp[2 * n + i]; d = ((d + Math.PI / 4) % (Math.PI / 2) + Math.PI / 2) % (Math.PI / 2) - Math.PI / 4;
+    disp[2 * n + i] += d * a;
+  }
+  disp[3 * n] += (z[3 * n] - disp[3 * n]) * a; dispASP += (ASP - dispASP) * a;
+}
+function draw() {
+  resizeCanvas(); easeDisplay();
+  const W = cv.width, L = disp[3 * n] || 1, Lx = L * dispASP, Ly = L / dispASP;
+  viewL = Math.max(Lx, Ly) * 1.03;
+  const sc = W / viewL, ox = (W - Lx * sc) / 2, oy = (W + Ly * sc) / 2;
+  ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.clearRect(0, 0, W, W);
+  ctx.setTransform(sc, 0, 0, -sc, ox, oy);
+  const rec = RECORDS[n];
+
+  const ink = css("--ink"), sqFill = css("--sq"), sqLock = css("--sqlock"), sqPart = css("--sqpart");
+  for (let i = 0; i < n; i++) {
+    ctx.save(); ctx.translate(disp[i], disp[n + i]); ctx.rotate(disp[2 * n + i]);
+    ctx.beginPath(); if (ctx.roundRect) ctx.roundRect(-0.5, -0.5, 1, 1, Math.max(0, R)); else ctx.rect(-0.5, -0.5, 1, 1);
+    ctx.fillStyle = !lockOn ? sqFill : LOCK[i] === 2 ? sqLock : LOCK[i] === 1 ? sqPart : sqFill; ctx.fill(); ctx.lineWidth = 0.025; ctx.strokeStyle = ink; ctx.globalAlpha = 0.55; ctx.stroke(); ctx.restore();
+  }
+  ctx.lineWidth = 0.06; ctx.strokeStyle = css("--wall"); ctx.strokeRect(0, 0, Lx, Ly);
+  if (drag.i >= 0) { ctx.beginPath(); ctx.arc(disp[drag.i], disp[n + drag.i], 0.12, 0, 2 * Math.PI); ctx.fillStyle = css("--accent"); ctx.fill(); }
+}
+function setState(s) { st.state = s; const el = document.getElementById("state"); el.textContent = { idle: "ready", compress: "compressing", jammed: "jammed", harden: "hardening", done: "squares" }[s]; el.className = "pill st-" + s; }
+function updateReadouts() {
+  checkRecord(); if (typeof trackBest === "function") trackBest();
+  { const b = (typeof BEST !== "undefined") && BEST[n]; const el = document.getElementById("ro-best"); if (el) el.textContent = b ? b.L.toFixed(5) : "–"; }
+  const L = z[3 * n], rec = RECORDS[n];
+  document.getElementById("ro-s").textContent = L.toFixed(5);
+  document.getElementById("ro-rec").textContent = rec ? rec.toFixed(6) : "unknown";
+  const gp = document.getElementById("ro-gap");
+  if (rec && R === 0) { const d = L - rec; gp.textContent = (d >= 0 ? "+" : "") + d.toFixed(5); gp.style.color = d < 1e-6 ? css("--good") : ""; }
+  else gp.textContent = R > 0 ? "harden first" : "–";
+  document.getElementById("ro-phi").textContent = (100 * phiNow()).toFixed(1) + "%";
+  document.getElementById("ro-e").textContent = energy(z, null).toExponential(1);
+  document.getElementById("ro-r").textContent = R.toFixed(3);
+  document.getElementById("ro-steps").textContent = st.steps;
+  const w = currentWind();
+  document.getElementById("wind-now").textContent = wind.mode === "seq" ? `wind: 20 random, now ${w.label || "off"}` : `wind: ${wind.mode === "off" ? "off" : (wind.mode === "dir" ? WIND_OPTS.find(o => o[1] === wind.dx && o[2] === wind.dy)?.[3] : (wind.mode === "out" ? "away from centre" : "toward centre"))}`;
+}
+
+// ---------- main loop ----------
+function tick() {
+  if (st.playing && !frozen) {
+    const k = +document.getElementById("speed").value;
+    const t0 = performance.now();
+    for (let s = 0; s < k && performance.now() - t0 < 40; s++) {
+      if (st.state === "harden") { hardenStep(); if (st.state === "done" && st.auto) { tighten(); st.auto = false; } break; }
+      resumeIfStopped();                                   // jammed or finished: keep going, retrying with small wall steps
+      if (st.state === "idle") setState("compress");
+      compressStep();
+    }
+    updateReadouts();
+  }
+  draw();
+  requestAnimationFrame(tick);
+}
+function setPlaying(p) { st.playing = p; const b = document.getElementById("b-play"); b.setAttribute("aria-pressed", p); b.textContent = p ? "❚❚ Pause" : "▶ Play"; }
+
+// ---------- controls ----------
+const fmt = { wall: () => (wallMax() * 100).toFixed(2) + "%", shake: () => shakeAmp().toFixed(3), 
+              round: () => (+document.getElementById("round").value / 100).toFixed(2), wstr: () => windAmp().toFixed(2), speed: () => document.getElementById("speed").value };
+for (const id of Object.keys(fmt)) { const el = document.getElementById(id), out = document.getElementById("o-" + id); const upd = () => { if (out) out.textContent = fmt[id](); }; el.addEventListener("input", upd); upd(); }
+document.getElementById("wall").addEventListener("input", () => { st.wallStep = Math.min(st.wallStep, wallMax()); });
+document.getElementById("b-new").addEventListener("click", newStart);
+document.getElementById("n-in").addEventListener("change", newStart);
+// live rounding: reshape the current squares; if they no longer fit, let the box grow just enough
+function applyRounding() {
+  if (st.state === "harden") return;
+  userRound = +document.getElementById("round").value;
+  const r = userRound / 100;
+  if (Math.abs(r - R) < 1e-9) return;
+  setR(r);
+  if (energy(z, null) > 1e-12) {
+    repairing = true;
+    lbfgs(z, 400, 1e-16);
+    if (energy(z, null) > 1e-12) solveJoint(3e3, 3e6, 400);     // still overlapping: let the box grow until valid
+    repairing = false;
+  }
+  enforceValid();
+  if (st.state === "done" && R > 0) setState("jammed");
+  if (st.state === "jammed" && R === 0) setState("done");
+  updateReadouts(); draw();
+}
+document.getElementById("round").addEventListener("input", applyRounding);
+function resumeIfStopped() {   // from a jammed or finished packing, Play/Step resume compression with a small wall step
+  if (st.state === "jammed" || st.state === "done") { st.wallStep = Math.max(st.wallStep, wallMax() * 0.25); setState("compress"); }
+}
+document.getElementById("b-play").addEventListener("click", () => { if (!st.playing) resumeIfStopped(); setPlaying(!st.playing); });
+document.getElementById("b-step").addEventListener("click", () => {
+  if (st.state === "harden") hardenStep(); else { resumeIfStopped(); if (st.state === "idle") setState("compress"); compressStep(); }
+  updateReadouts(); draw();
+});
+document.getElementById("b-auto").addEventListener("click", () => { if (st.state === "done") newStart(); st.auto = true; if (st.state === "jammed") startHarden(); setPlaying(true); });
+document.getElementById("b-harden").addEventListener("click", () => { startHarden(); setPlaying(true); });
+document.getElementById("b-tight").addEventListener("click", tighten);
+// expand: scale box and positions together so gaps open evenly; compression can then resume from the looser state
+function expandBox(f) {
+  if (st.state === "harden") return;
+  ASP = 1; z[3 * n] *= f;
+  for (let i = 0; i < n; i++) { z[i] *= f; z[n + i] *= f; }
+  enforceValid();
+  st.wallStep = wallMax(); st.phi0 = Math.min(st.phi0, phiNow());
+  if (st.state === "jammed" || st.state === "done") setState("idle");
+  updateReadouts(); draw();
+}
+document.getElementById("b-exp3").addEventListener("click", () => expandBox(1.03));
+document.getElementById("b-exp10").addEventListener("click", () => expandBox(1.10));
+for (const b of document.querySelectorAll("[data-w]")) b.addEventListener("click", () => {
+  const v = b.dataset.w;
+  for (const o of document.querySelectorAll("[data-w]")) o.setAttribute("aria-pressed", o === b);
+  if (v === "off") wind = { mode: "off" };
+  else if (v === "out" || v === "in") wind = { mode: v };
+  else if (v === "seq") { wind = { mode: "seq" }; windSeq = Array.from({ length: 20 }, () => WIND_OPTS[Math.floor(Math.random() * WIND_OPTS.length)]); }
+  else { const [dx, dy] = v.split(",").map(Number); wind = { mode: "dir", dx, dy }; }
+  updateReadouts();
+});
+
+// drag squares
+const drag = { i: -1 };
+function worldPt(ev) {
+  const rect = cv.getBoundingClientRect(), dpr = cv.width / rect.width, W = cv.width, L = disp ? disp[3 * n] : z[3 * n], sc = W / viewL;
+  const ox = (W - L * dispASP * sc) / 2, oy = (W + L / dispASP * sc) / 2;
+  const px = (ev.clientX - rect.left) * dpr, py = (ev.clientY - rect.top) * dpr;
+  return [(px - ox) / sc, (oy - py) / sc];
+}
+cv.addEventListener("pointerdown", ev => {
+  const [x, y] = worldPt(ev); let bi = -1, bd = 0.5;
+  for (let i = 0; i < n; i++) { const d = Math.hypot(z[i] - x, z[n + i] - y); if (d < bd) { bd = d; bi = i; } }
+  if (bi >= 0) { drag.i = bi; drag.dx = z[bi] - x; drag.dy = z[n + bi] - y; drag.was = st.playing; setPlaying(false); cv.setPointerCapture(ev.pointerId); cv.classList.add("dragging"); }
+});
+cv.addEventListener("pointermove", ev => { if (drag.i < 0) return; const [x, y] = worldPt(ev); z[drag.i] = x + drag.dx; z[n + drag.i] = y + drag.dy; if (disp) { disp[drag.i] = z[drag.i]; disp[n + drag.i] = z[n + drag.i]; } updateReadouts(); });
+cv.addEventListener("pointerup", () => {
+  if (drag.i < 0) return; drag.i = -1; cv.classList.remove("dragging");
+  if (st.state === "done" || st.state === "jammed") solveJoint(3e3, R === 0 ? 3e6 : 3e4, 400); else lbfgs(z, 600, 1e-18);
+  enforceValid();
+  updateReadouts(); if (drag.was) setPlaying(true);
+});
+window.addEventListener("resize", draw);
+
+
+// ---------- record watch: independent check, freeze on a certified improvement ----------
+function maxViolation() {   // separating-axis check for true squares (r = 0) in the current square box
+  const L = z[3 * n]; let worst = -1e9;
+  const V = [];
+  for (let i = 0; i < n; i++) {
+    const c = Math.cos(z[2 * n + i]), s = Math.sin(z[2 * n + i]), pts = [];
+    for (let k = 0; k < 4; k++) { const kx = KX[k] * 0.5, ky = KY[k] * 0.5; pts.push([z[i] + c * kx - s * ky, z[n + i] + s * kx + c * ky]); }
+    V.push(pts);
+    for (const [x, y] of pts) worst = Math.max(worst, -x, -y, x - L, y - L);
+  }
+  for (let i = 0; i < n; i++) for (let j = i + 1; j < n; j++) {
+    if ((z[i] - z[j]) ** 2 + (z[n + i] - z[n + j]) ** 2 >= 2.0001) continue;
+    let ov = 1e9;
+    for (const t of [z[2 * n + i], z[2 * n + i] + Math.PI / 2, z[2 * n + j], z[2 * n + j] + Math.PI / 2]) {
+      const ax = Math.cos(t), ay = Math.sin(t);
+      const pi = V[i].map(p => p[0] * ax + p[1] * ay), pj = V[j].map(p => p[0] * ax + p[1] * ay);
+      ov = Math.min(ov, Math.max(...pi) - Math.min(...pj), Math.max(...pj) - Math.min(...pi));
+    }
+    worst = Math.max(worst, ov);
+  }
+  return worst;
+}
+let frozen = false, lastClaim = Infinity;   // after dismissing, only a strictly better packing alerts again
+function checkRecord() {
+  if (frozen || R !== 0 || Math.abs(ASP - 1) > 1e-12) return;
+  const rec = RECORDS[n]; if (!rec) return;
+  const L = z[3 * n]; if (L >= rec) return;
+  const v = maxViolation();
+  if (v > 1e-8) return;                      // overlapping or outside the box: not a valid packing, no claim
+  const cert = L + 2e-8;                     // tiny safety margin for rounding
+  if (cert >= Math.min(rec, lastClaim) - 1e-7) return;
+  lastClaim = cert;
+  frozen = true; setPlaying(false); st.auto = false; document.body.classList.add("frozen");
+  let txt = `n=${n} s=${cert.toFixed(12)} record=${rec}\n`;
+  for (let i = 0; i < n; i++) txt += `${z[i].toFixed(12)} ${z[n + i].toFixed(12)} ${z[2 * n + i].toFixed(12)}\n`;
+  document.getElementById("win-msg").textContent = `n = ${n}: certified box side ${cert.toFixed(9)} vs known record ${rec}  (better by ${(rec - cert).toExponential(3)}; largest overlap ${v.toExponential(2)})`;
+  document.getElementById("win-coords").value = txt;
+  try { localStorage.setItem("packing-lab-candidate-" + n + "-" + Date.now(), txt); } catch (e) {}
+  document.getElementById("win").hidden = false;
+  document.getElementById("win-copy").focus();
+}
+document.getElementById("win-copy").addEventListener("click", () => {
+  const ta = document.getElementById("win-coords"), msg = document.getElementById("win-copied");
+  navigator.clipboard.writeText(ta.value).then(() => { msg.textContent = "copied"; }, () => { ta.select(); msg.textContent = "selected: press Ctrl/Cmd+C"; });
+});
+document.getElementById("win-close").addEventListener("click", () => { document.getElementById("win").hidden = true; document.body.classList.remove("frozen"); frozen = false; });
+
+// space bar: play / pause (not while typing in a text field, not while frozen on a record)
+document.addEventListener("keydown", ev => {
+  if (ev.code !== "Space" && ev.key !== " ") return;
+  const t = ev.target, tag = t && t.tagName;
+  if (tag === "TEXTAREA" || (tag === "INPUT" && (t.type === "number" || t.type === "text"))) return;
+  ev.preventDefault();
+  if (frozen) return;
+  if (!st.playing) resumeIfStopped();
+  setPlaying(!st.playing);
+});
+
+// ---------- best valid square packing per n (kept across starts, saved in this browser) ----------
+const BEST = {};
+try { Object.assign(BEST, JSON.parse(localStorage.getItem("packing-lab-best") || "{}")); } catch (e) {}
+function trackBest() {
+  if (R !== 0 || Math.abs(ASP - 1) > 1e-12) return;
+  const L = z[3 * n], b = BEST[n];
+  if (b && L >= b.L - 1e-10) return;
+  if (maxViolation() > 1e-8) return;                       // must be a genuinely valid packing
+  BEST[n] = { L, z: Array.from(z) };
+  try { localStorage.setItem("packing-lab-best", JSON.stringify(BEST)); } catch (e) {}
+}
+document.getElementById("b-best").addEventListener("click", () => {
+  const b = BEST[n]; if (!b || b.z.length !== z.length) return;
+  setPlaying(false); setR(0); ASP = 1; z.set(b.z); PERM = null; LOCK = new Uint8Array(n);
+  document.getElementById("round").value = 0; document.getElementById("o-round").textContent = "0.00";
+  lastValid = new Float64Array(z); snapDisplay(); setState("done"); updateReadouts(); draw();
+});
+
+for (const b of document.querySelectorAll("[data-box]")) b.addEventListener("click", () => {
+  boxMode = b.dataset.box;
+  for (const o of document.querySelectorAll("[data-box]")) o.setAttribute("aria-pressed", o === b);
+  if (boxMode !== "shrink" && (st.state === "jammed" || st.state === "done")) setState("compress");
+  if (boxMode === "shrink") st.wallStep = Math.max(st.wallStep, wallMax() * 0.25);
+});
+
+document.getElementById("lock").addEventListener("change", () => { computeLocks(); draw(); });
+document.getElementById("lock-outward").addEventListener("change", () => { computeLocks(); draw(); });
+{ const inner = compressStep; compressStep = function () { stepping = true; try { inner(); } finally { stepping = false; } }; }
+newStart();
+requestAnimationFrame(tick);
+</script>
