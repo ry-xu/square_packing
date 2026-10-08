@@ -1,0 +1,46 @@
+# Checker outputs for this certificate (all must pass):
+#  1. tools/check_exact.py - our exact rational checker (Python fractions.Fraction, separating-axis test on every close pair)
+#  2. check_packing.py - David Ellsworth, Davidebyzero/packing_squares_in_squares__tools@79f8a378d52e757d70f7cfb2c2f7a24a53da0204, precision 40
+#  3. packing-witness check / promote / verify - jlevy/squares sqpack@84881f214086bf5b8ce83a714c4fda6d7be7b2d1
+#     (promote writes an exact rational witness; verify re-checks it exactly)
+
+$ python3 tools/check_exact.py certificates/n236/n236.cert.json
+n=236 VALID: all squares inside, all pairs interior-disjoint; 27730 pairs, 464 tested by SAT (rest: centres >= sqrt2 apart); 0.3 s  [certificates/n236/n236.cert.json]
+(exit 0, 0.33 s)
+
+$ python3 packing_squares_in_squares__tools/check_packing.py certificates/n236/n236.cert.txt 40
+Checking certificates/n236/n236.cert.txt
+Epsilon: 1E-40
+S: 15.87001385051587001385050000000000000000
+Container: OK
+Overlaps: NONE
+VALID
+(exit 0, 0.16 s)
+
+$ packing-witness check certificates/n236/n236.witness.yaml --method numerical-multiprecision --precision 80 --tolerance 1e-30
+NUMERIC CHECK PASSED — not verification
+  id: W-claim-n236
+  n: 236
+  method: numerical-multiprecision
+  tolerance: 1e-30
+  pairs tested: 27730
+  limits: Finite-precision evidence only. A small tolerance, including 1e-100, does not establish exact feasibility or optimality.
+(exit 0, 4.15 s)
+
+$ packing-witness promote certificates/n236/n236.witness.yaml --strategy robust-rational --max-side-increase 1e-9 --output-witness certificates/n236/n236.sqpack-rational.yaml
+PROMOTED — exact rational certificate produced
+  side: 31740027701029740027701/2000000000000000000000
+  method: exact-algebraic
+  pairs tested: 27730
+  limits: Exact feasible upper-bound witness derived by rational robustification; does not establish global optimality or certify the original decimal pose.
+(exit 0, 1.64 s)
+
+$ packing-witness verify certificates/n236/n236.sqpack-rational.yaml
+VERIFIED
+  id: W-claim-n236-rational
+  n: 236
+  side: 31740027701029740027701/2000000000000000000000
+  method: exact-algebraic
+  pairs tested: 27730
+  limits: Verifies witness feasibility and its upper bound, not global optimality.
+(exit 0, 5.97 s)

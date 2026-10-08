@@ -1,0 +1,46 @@
+# Checker outputs for this certificate (all must pass):
+#  1. tools/check_exact.py - our exact rational checker (Python fractions.Fraction, separating-axis test on every close pair)
+#  2. check_packing.py - David Ellsworth, Davidebyzero/packing_squares_in_squares__tools@79f8a378d52e757d70f7cfb2c2f7a24a53da0204, precision 40
+#  3. packing-witness check / promote / verify - jlevy/squares sqpack@84881f214086bf5b8ce83a714c4fda6d7be7b2d1
+#     (promote writes an exact rational witness; verify re-checks it exactly)
+
+$ python3 tools/check_exact.py certificates/n102/n102.cert.json
+n=102 VALID: all squares inside, all pairs interior-disjoint; 5151 pairs, 209 tested by SAT (rest: centres >= sqrt2 apart); 0.1 s  [certificates/n102/n102.cert.json]
+(exit 0, 0.11 s)
+
+$ python3 packing_squares_in_squares__tools/check_packing.py certificates/n102/n102.cert.txt 40
+Checking certificates/n102/n102.cert.txt
+Epsilon: 1E-40
+S: 10.60582869651060582869650000000000000000
+Container: OK
+Overlaps: NONE
+VALID
+(exit 0, 0.06 s)
+
+$ packing-witness check certificates/n102/n102.witness.yaml --method numerical-multiprecision --precision 80 --tolerance 1e-30
+NUMERIC CHECK PASSED — not verification
+  id: W-claim-n102
+  n: 102
+  method: numerical-multiprecision
+  tolerance: 1e-30
+  pairs tested: 5151
+  limits: Finite-precision evidence only. A small tolerance, including 1e-100, does not establish exact feasibility or optimality.
+(exit 0, 0.99 s)
+
+$ packing-witness promote certificates/n102/n102.witness.yaml --strategy robust-rational --max-side-increase 1e-9 --output-witness certificates/n102/n102.sqpack-rational.yaml
+PROMOTED — exact rational certificate produced
+  side: 21211657393019211657393/2000000000000000000000
+  method: exact-algebraic
+  pairs tested: 5151
+  limits: Exact feasible upper-bound witness derived by rational robustification; does not establish global optimality or certify the original decimal pose.
+(exit 0, 0.60 s)
+
+$ packing-witness verify certificates/n102/n102.sqpack-rational.yaml
+VERIFIED
+  id: W-claim-n102-rational
+  n: 102
+  side: 21211657393019211657393/2000000000000000000000
+  method: exact-algebraic
+  pairs tested: 5151
+  limits: Verifies witness feasibility and its upper bound, not global optimality.
+(exit 0, 1.50 s)

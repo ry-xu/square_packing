@@ -1,0 +1,46 @@
+# Checker outputs for this certificate (all must pass):
+#  1. tools/check_exact.py - our exact rational checker (Python fractions.Fraction, separating-axis test on every close pair)
+#  2. check_packing.py - David Ellsworth, Davidebyzero/packing_squares_in_squares__tools@79f8a378d52e757d70f7cfb2c2f7a24a53da0204, precision 40
+#  3. packing-witness check / promote / verify - jlevy/squares sqpack@84881f214086bf5b8ce83a714c4fda6d7be7b2d1
+#     (promote writes an exact rational witness; verify re-checks it exactly)
+
+$ python3 tools/check_exact.py certificates/n179/n179.cert.json
+n=179 VALID: all squares inside, all pairs interior-disjoint; 15931 pairs, 342 tested by SAT (rest: centres >= sqrt2 apart); 0.2 s  [certificates/n179/n179.cert.json]
+(exit 0, 0.21 s)
+
+$ python3 packing_squares_in_squares__tools/check_packing.py certificates/n179/n179.cert.txt 40
+Checking certificates/n179/n179.cert.txt
+Epsilon: 1E-40
+S: 13.89395494251389395494250000000000000000
+Container: OK
+Overlaps: NONE
+VALID
+(exit 0, 0.10 s)
+
+$ packing-witness check certificates/n179/n179.witness.yaml --method numerical-multiprecision --precision 80 --tolerance 1e-30
+NUMERIC CHECK PASSED — not verification
+  id: W-claim-n179
+  n: 179
+  method: numerical-multiprecision
+  tolerance: 1e-30
+  pairs tested: 15931
+  limits: Finite-precision evidence only. A small tolerance, including 1e-100, does not establish exact feasibility or optimality.
+(exit 0, 2.52 s)
+
+$ packing-witness promote certificates/n179/n179.witness.yaml --strategy robust-rational --max-side-increase 1e-9 --output-witness certificates/n179/n179.sqpack-rational.yaml
+PROMOTED — exact rational certificate produced
+  side: 5557581977005157581977/400000000000000000000
+  method: exact-algebraic
+  pairs tested: 15931
+  limits: Exact feasible upper-bound witness derived by rational robustification; does not establish global optimality or certify the original decimal pose.
+(exit 0, 1.04 s)
+
+$ packing-witness verify certificates/n179/n179.sqpack-rational.yaml
+VERIFIED
+  id: W-claim-n179-rational
+  n: 179
+  side: 5557581977005157581977/400000000000000000000
+  method: exact-algebraic
+  pairs tested: 15931
+  limits: Verifies witness feasibility and its upper bound, not global optimality.
+(exit 0, 3.59 s)
